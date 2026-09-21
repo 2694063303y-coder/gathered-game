@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>星际战机 · 云上游戏厅</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1026'/%3E%3Cpath d='M32 8l6 30-6 18-6-18z' fill='%234ade80'/%3E%3Cpath d='M32 38l-12 8 6-12zM32 38l12 8-6-12z' fill='%2322d3ee'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0b1026;--ink:#eaf2ff;--muted:rgba(234,242,255,.6);
+    --green:#4ade80;--line:rgba(140,180,255,.12);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(800px 500px at 80% -5%, rgba(74,222,128,.10) 0%, transparent 60%), var(--bg);
+    color:var(--ink);
+    font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:28px 16px 40px;
+  }
+  .back{
+    width:min(100%,470px);margin-bottom:14px;color:var(--muted);text-decoration:none;font-size:13px;
+    display:inline-flex;align-items:center;gap:6px;transition:color .15s ease;
+  }
+  .back:hover{color:var(--green)}
+  h1{font-size:24px;font-weight:800;letter-spacing:.06em;text-align:center}
+  .sub{font-size:13px;color:var(--muted);margin:4px 0 18px;text-align:center}
+  .hud{
+    width:min(100%,470px);display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;
+  }
+  .hud .num{font-size:20px;font-weight:700;color:var(--green);font-variant-numeric:tabular-nums}
+  .hud .lbl{font-size:11px;letter-spacing:.2em;color:var(--muted)}
+  .board-wrap{position:relative;width:min(100%,470px)}
+  canvas#board{display:block;width:100%;aspect-ratio:4/6.2;border-radius:16px;background:#0e1433;border:1px solid var(--line);box-shadow:0 18px 50px rgba(0,0,0,.45)}
+  .overlay{
+    position:absolute;inset:0;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+    background:rgba(8,11,30,.88);text-align:center;padding:20px;transition:opacity .25s ease, visibility .25s ease;
+  }
+  .overlay.hidden{opacity:0;visibility:hidden;pointer-events:none}
+  .overlay h2{font-size:26px;font-weight:800}
+  .overlay p{font-size:13px;color:var(--muted);line-height:1.8}
+  .btn{
+    cursor:pointer;border:0;border-radius:999px;padding:12px 34px;font-size:15px;font-weight:700;
+    font-family:inherit;color:#0b1026;background:linear-gradient(120deg,var(--green),#86efac);
+    box-shadow:0 8px 24px rgba(74,222,128,.3);transition:transform .15s ease;
+  }
+  .btn:hover{transform:translateY(-2px) scale(1.02)}
+  .btn:active{transform:scale(.97)}
+  .tip{width:min(100%,470px);margin-top:14px;font-size:12px;color:var(--muted);text-align:center}
+  .tip b{color:var(--green)}
+  @media (max-width:480px){h1{font-size:21px}}
+  @media (prefers-reduced-motion: reduce){.overlay{transition:none}}
+</style>
+</head>
+<body>
+  <a class="back" href="../index.html">← 返回游戏厅</a>
+  <h1>星际战机</h1>
+  <div class="sub">移动战机，击落敌机与陨石</div>
+  <div class="hud">
+    <div><div class="lbl">SCORE</div><div class="num" id="score">0</div></div>
+    <div style="text-align:center"><div class="lbl">HP</div><div class="num" id="hp" style="color:var(--ink)">5</div></div>
+    <div style="text-align:right"><div class="lbl">BEST</div><div class="num" id="best" style="color:var(--yellow,#fcd34d)">0</div></div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="board" width="470" height="729"></canvas>
+    <div class="overlay" id="startOv">
+      <h2>星际战机</h2>
+      <p>←→ 移动 · 空格 / 自动开火<br>触屏滑动移动，自动射击</p>
+      <button class="btn" id="startBtn">开始游戏</button>
+    </div>
+    <div class="overlay hidden" id="overOv">
+      <h2>战机坠毁</h2>
+      <p>得分 <b id="finalScore" style="color:var(--green)">0</b><br>最高分 <span id="finalBest" style="color:var(--ink)">0</span></p>
+      <button class="btn" id="restartBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="tip"><b>←→</b> 移动 · <b>空格</b> 开火（或自动）· 击落敌机得分</div>
+<script>
+(() => {
+  "use strict";
+  const canvas=document.getElementById("board"), ctx=canvas.getContext("2d");
+  const W=470, H=729, dpr=Math.min(window.devicePixelRatio||1,2.5);
+  canvas.width=W*dpr; canvas.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+  let state="ready", score, hp, player, bullets, enemies, stars, fireTimer, spawnTimer, best;
+  try{best=parseInt(localStorage.getItem("jump-best-shooter")||"0",10)||0;}catch(e){best=0;}
+  document.getElementById("best").textContent=best;
+  const keys={};
+
+  function reset(){
+    score=0; hp=5;
+    player={x:W/2,y:H-70,w:40,h:30,inv:0};
+    bullets=[]; enemies=[]; fireTimer=0; spawnTimer=0;
+    stars=Array.from({length:60},()=>({x:Math.random()*W,y:Math.random()*H,s:0.5+Math.random()*1.8,v:1+Math.random()*2.5}));
+    document.getElementById("score").textContent="0";
+    document.getElementById("hp").textContent="5";
+  }
+  function start(){
+    ensureAudio(); reset(); state="playing";
+    document.getElementById("startOv").classList.add("hidden");
+    document.getElementById("overOv").classList.add("hidden");
+  }
+  // 音效
+  let audioCtx=null, muted=false;
+  try{muted=localStorage.getItem("jump-muted")==="1";}catch(e){}
+  function ensureAudio(){if(!audioCtx){const AC=window.AudioContext||window.webkitAudioContext;if(AC)audioCtx=new AC();}if(audioCtx&&audioCtx.state==="suspended")audioCtx.resume();}
+  function beep(f0,f1,dur,type,vol){
+    if(muted||!audioCtx)return;
+    const t=audioCtx.currentTime,o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type=type||"square";o.frequency.setValueAtTime(f0,t);
+    o.frequency.exponentialRampToValueAtTime(f1||f0,t+dur);
+    g.gain.setValueAtTime(vol||0.08,t);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g).connect(audioCtx.destination);o.start(t);o.stop(t+dur+0.02);
+  }
+  const sfx={shoot:()=>beep(880,220,0.06,"square",0.05),boom:()=>beep(200,50,0.2,"sawtooth",0.12),hit:()=>beep(400,120,0.15,"sawtooth",0.12)};
+
+  function update(){
+    // 玩家移动
+    const speed=5.5;
+    if(keys.ArrowLeft||keys.KeyA)player.x=Math.max(25,player.x-speed);
+    if(keys.ArrowRight||keys.KeyD)player.x=Math.min(W-25,player.x+speed);
+    // 开火
+    fireTimer++;
+    if(fireTimer%12===0){
+      bullets.push({x:player.x,y:player.y-20});
+      sfx.shoot();
+    }
+    // 子弹
+    for(let i=bullets.length-1;i>=0;i--){
+      bullets[i].y-=9;
+      if(bullets[i].y<-20)bullets.splice(i,1);
+    }
+    // 敌人生成
+    spawnTimer++;
+    if(spawnTimer%(Math.max(28,60-Math.floor(score/30)*3))===0){
+      const type=Math.random()<0.6?"ship":"rock";
+      if(type==="ship"){
+        enemies.push({type,x:30+Math.random()*(W-60),y:-30,w:36,h:28,vx:(Math.random()-0.5)*1.6,vy:1.6+score/200,hp:1});
+      } else {
+        enemies.push({type,x:20+Math.random()*(W-40),y:-20,r:12+Math.random()*8,vx:(Math.random()-0.5)*2,vy:2.2+score/200,hp:1});
+      }
+    }
+    // 敌人移动
+    for(let i=enemies.length-1;i>=0;i--){
+      const e=enemies[i];
+      e.y+=e.vy; if(e.vx)e.x+=e.vx;
+      if(e.x<10)e.x=10;if(e.x>W-10)e.x=W-10;
+      if(e.y>H+40){enemies.splice(i,1);continue;}
+      // 撞玩家
+      if(player.inv<=0&&hitTest(e,player)){
+        hp--; player.inv=40;
+        document.getElementById("hp").textContent=hp;
+        sfx.hit();
+        enemies.splice(i,1);
+        if(hp<=0){gameOver();return;}
+        continue;
+      }
+      // 被子弹击中
+      for(let b=bullets.length-1;b>=0;b--){
+        if(bulletHit(b,e)){
+          sfx.boom();
+          score+=(e.type==="ship"?10:5);
+          document.getElementById("score").textContent=score;
+          if(score>best){best=score;try{localStorage.setItem("jump-best-shooter",String(best));}catch(e){}document.getElementById("best").textContent=best;}
+          bullets.splice(b,1); enemies.splice(i,1);
+          break;
+        }
+      }
+    }
+    if(player.inv>0)player.inv--;
+  }
+  function hitTest(e,p){
+    if(e.type==="ship"){
+      return Math.abs(e.x-p.x)<(e.w+p.w)/2&&Math.abs(e.y-p.y)<(e.h+p.h)/2;
+    }
+    const dx=e.x-p.x,dy=e.y-p.y;
+    return Math.sqrt(dx*dx+dy*dy)<e.r+p.w/2;
+  }
+  function bulletHit(b,e){
+    if(e.type==="ship"){
+      return b.x>e.x-e.w/2&&b.x<e.x+e.w/2&&b.y>e.y-e.h/2&&b.y<e.y+e.h/2;
+    }
+    const dx=b.x-e.x,dy=b.y-e.y;
+    return Math.sqrt(dx*dx+dy*dy)<e.r+3;
+  }
+  function gameOver(){
+    state="over";
+    if(score>best){best=score;try{localStorage.setItem("jump-best-shooter",String(best));}catch(e){}}
+    document.getElementById("finalScore").textContent=score;
+    document.getElementById("finalBest").textContent="最高分 "+best;
+    setTimeout(()=>{if(state==="over")document.getElementById("overOv").classList.remove("hidden");},380);
+  }
+  function draw(){
+    ctx.fillStyle="#0e1433"; ctx.fillRect(0,0,W,H);
+    // 星星滚动
+    for(const s of stars){
+      s.y+=s.v;
+      if(s.y>H){s.y=0;s.x=Math.random()*W;}
+      ctx.fillStyle=s.s>1.2?"rgba(234,242,255,.6)":"rgba(234,242,255,.25)";
+      ctx.fillRect(s.x,s.y,s.s,s.s*1.6);
+    }
+    // 玩家
+    if(player.inv>0&&Math.floor(Date.now()/80)%2===0){
+      // 闪烁无敌
+    } else {
+      ctx.save(); ctx.translate(player.x,player.y);
+      ctx.fillStyle="#4ade80";
+      ctx.beginPath(); ctx.moveTo(0,-16); ctx.lineTo(9,8); ctx.lineTo(0,4); ctx.lineTo(-9,8); ctx.closePath(); ctx.fill();
+      ctx.fillStyle="rgba(255,255,255,.6)";
+      ctx.beginPath(); ctx.arc(0,-4,3,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+      // 引擎光
+      ctx.fillStyle="rgba(74,222,128,.4)";
+      ctx.beginPath(); ctx.arc(player.x,player.y+12,5,0,Math.PI*2); ctx.fill();
+    }
+    // 子弹
+    ctx.fillStyle="#22d3ee";
+    for(const b of bullets){
+      ctx.fillRect(b.x-1.5,b.y-8,3,14);
+      ctx.fillStyle="rgba(255,255,255,.5)"; ctx.fillRect(b.x-3,b.y-4,6,3); ctx.fillStyle="#22d3ee";
+    }
+    // 敌人
+    for(const e of enemies){
+      if(e.type==="ship"){
+        ctx.save(); ctx.translate(e.x,e.y);
+        ctx.fillStyle="#f472b6";
+        ctx.beginPath(); ctx.moveTo(0,12); ctx.lineTo(10,-8); ctx.lineTo(4,-4); ctx.lineTo(-4,-4); ctx.lineTo(-10,-8); ctx.closePath(); ctx.fill();
+        ctx.fillStyle="#f9a8d4";
+        ctx.beginPath(); ctx.arc(0,2,3,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.fillStyle="#fb923c";
+        ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle="rgba(255,255,255,.3)";
+        ctx.beginPath(); ctx.arc(e.x-3,e.y-3,e.r*0.35,0,Math.PI*2); ctx.fill();
+      }
+    }
+  }
+  function loop(){
+    requestAnimationFrame(loop);
+    if(state==="playing")update();
+    draw();
+  }
+  document.addEventListener("keydown",e=>{
+    keys[e.code]=true;
+    if(state==="ready"){start();return;}
+  });
+  document.addEventListener("keyup",e=>{keys[e.code]=false;});
+  // 触屏拖动
+  let dragging=false;
+  canvas.addEventListener("pointerdown",e=>{
+    if(state==="ready"){start();}
+    dragging=true;
+  });
+  canvas.addEventListener("pointermove",e=>{
+    if(!dragging||state!=="playing")return;
+    const rect=canvas.getBoundingClientRect();
+    player.x=Math.max(25,Math.min(W-25,((e.clientX-rect.left)/rect.width)*W));
+  });
+  canvas.addEventListener("pointerup",()=>dragging=false);
+  document.getElementById("startBtn").addEventListener("click",start);
+  document.getElementById("restartBtn").addEventListener("click",start);
+  reset(); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
