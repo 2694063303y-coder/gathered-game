@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>扫雷 · 云上游戏厅</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1026'/%3E%3Ccircle cx='32' cy='32' r='14' fill='%23fb923c'/%3E%3Cpath d='M32 18v-8M32 54v-8M18 32h-8M54 32h-8M22 22l-6-6M48 48l-6-6M42 22l6-6M16 48l6-6' stroke='%23fb923c' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0b1026;--ink:#eaf2ff;--muted:rgba(234,242,255,.6);
+    --orange:#fb923c;--amber:#fbbf24;--cell:rgba(30,38,84,.75);--open:rgba(24,30,66,.6);--line:rgba(140,180,255,.12);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(800px 500px at 80% -5%, rgba(251,146,60,.10) 0%, transparent 60%), var(--bg);
+    color:var(--ink);
+    font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:28px 16px 40px;
+  }
+  .back{
+    width:min(100%,470px);margin-bottom:14px;color:var(--muted);text-decoration:none;font-size:13px;
+    display:inline-flex;align-items:center;gap:6px;transition:color .15s ease;
+  }
+  .back:hover{color:var(--orange)}
+  h1{font-size:24px;font-weight:800;letter-spacing:.06em;text-align:center}
+  .sub{font-size:13px;color:var(--muted);margin:4px 0 18px;text-align:center}
+  .hud{
+    width:min(100%,470px);display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;
+  }
+  .hud .num{font-size:20px;font-weight:700;color:var(--orange);font-variant-numeric:tabular-nums}
+  .hud .lbl{font-size:11px;letter-spacing:.2em;color:var(--muted)}
+  .btn{
+    cursor:pointer;border:0;border-radius:999px;padding:9px 20px;font-size:13px;font-weight:700;
+    font-family:inherit;color:#0b1026;background:linear-gradient(120deg,var(--orange),#fcd34d);
+    transition:transform .15s ease;
+  }
+  .btn:hover{transform:translateY(-1px)}
+  .btn:active{transform:scale(.97)}
+  .board-wrap{position:relative;width:min(100%,470px)}
+  #board{
+    display:grid;gap:6px;background:#0e1433;border:1px solid var(--line);border-radius:16px;padding:10px;
+    box-shadow:0 18px 50px rgba(0,0,0,.45);
+  }
+  .mcell{
+    aspect-ratio:1;border-radius:7px;background:var(--cell);
+    display:grid;place-items:center;font-weight:800;font-size:clamp(11px,2.4vw,17px);
+    cursor:pointer;user-select:none;position:relative;
+    font-variant-numeric:tabular-nums;transition:background .1s ease;
+  }
+  .mcell:hover{background:rgba(50,60,120,.85)}
+  .mcell.open{background:var(--open);cursor:default}
+  .mcell.open:hover{background:var(--open)}
+  .mcell.flag{background:rgba(251,146,60,.16);color:var(--orange)}
+  .mcell.mine{background:rgba(244,63,94,.35);color:#fecdd3}
+  .mcell.n1{color:#60a5fa}.mcell.n2{color:#4ade80}.mcell.n3{color:#f87171}.mcell.n4{color:#a78bfa}
+  .mcell.n5{color:#fb923c}.mcell.n6{color:#22d3ee}.mcell.n7{color:#facc15}.mcell.n8{color:#f9a8d4}
+  .mcell .bomb{font-size:.8em}
+  .overlay{
+    position:absolute;inset:0;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+    background:rgba(8,11,30,.88);text-align:center;padding:20px;transition:opacity .25s ease, visibility .25s ease;
+  }
+  .overlay.hidden{opacity:0;visibility:hidden;pointer-events:none}
+  .overlay h2{font-size:26px;font-weight:800}
+  .overlay p{font-size:13px;color:var(--muted);line-height:1.8}
+  .overlay .btn{padding:12px 34px;font-size:15px;box-shadow:0 8px 24px rgba(251,146,60,.3)}
+  .tip{width:min(100%,470px);margin-top:14px;font-size:12px;color:var(--muted);text-align:center;line-height:1.8}
+  .tip b{color:var(--orange)}
+  @media (max-width:480px){
+    h1{font-size:21px}
+    #board{gap:4px;padding:7px;border-radius:12px}
+    .mcell{border-radius:5px}
+  }
+  @media (prefers-reduced-motion: reduce){.overlay{transition:none}}
+</style>
+</head>
+<body>
+  <a class="back" href="../index.html">← 返回游戏厅</a>
+  <h1>扫雷</h1>
+  <div class="sub">翻开格子，用数字推理出所有地雷</div>
+  <div class="hud">
+    <div><div class="lbl">REMAIN</div><div class="num" id="mineCount">10</div></div>
+    <div style="text-align:center"><div class="lbl">TIME</div><div class="num" id="timer" style="color:var(--ink)">0</div></div>
+    <button class="btn" id="newBtn">新一局</button>
+  </div>
+  <div class="board-wrap">
+    <div id="board"></div>
+    <div class="overlay" id="startOv">
+      <h2>扫雷</h2>
+      <p><b style="color:var(--orange)">点击</b>翻开格子 · <b style="color:var(--orange)">右键</b>标记地雷<br>数字代表周围 8 格的地雷数</p>
+      <button class="btn" id="startBtn">开始游戏</button>
+    </div>
+    <div class="overlay hidden" id="overOv">
+      <h2 id="overTitle">游戏结束</h2>
+      <p id="overMsg">踩到地雷了</p>
+      <button class="btn" id="restartBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="tip">左键翻开 · 右键（长按）插旗 · 全部安全格翻开即获胜</div>
+<script>
+(() => {
+  "use strict";
+  const ROWS=9, COLS=9, MINES=10;
+  let grid, revealed, flags, state="ready", firstClick=true, time=0, timerId=null, minesLeft;
+  const boardEl=document.getElementById("board");
+
+  function initGrid(){
+    grid=Array.from({length:ROWS},()=>Array(COLS).fill(0));
+    revealed=Array.from({length:ROWS},()=>Array(COLS).fill(false));
+    flags=Array.from({length:ROWS},()=>Array(COLS).fill(false));
+  }
+  function placeMines(safeR,safeC){
+    let placed=0;
+    while(placed<MINES){
+      const r=Math.floor(Math.random()*ROWS), c=Math.floor(Math.random()*COLS);
+      if(grid[r][c]===-1)continue;
+      if(Math.abs(r-safeR)<=1&&Math.abs(c-safeC)<=1)continue;
+      grid[r][c]=-1; placed++;
+    }
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      if(grid[r][c]===-1)continue;
+      let n=0;
+      for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+        const nr=r+dr,nc=c+dc;
+        if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&grid[nr][nc]===-1)n++;
+      }
+      grid[r][c]=n;
+    }
+  }
+  function render(){
+    boardEl.style.gridTemplateColumns=`repeat(${COLS},1fr)`;
+    boardEl.innerHTML="";
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const el=document.createElement("div");
+      el.className="mcell"; el.dataset.r=r; el.dataset.c=c;
+      if(flags[r][c]){el.classList.add("flag");el.textContent="⚑";}
+      else if(revealed[r][c]){
+        el.classList.add("open");
+        if(grid[r][c]===-1){el.classList.add("mine");el.textContent="✦";}
+        else if(grid[r][c]>0){el.classList.add("n"+grid[r][c]);el.textContent=grid[r][c];}
+      }
+      boardEl.appendChild(el);
+    }
+    minesLeft=MINES-Object.values(flags).reduce((a,row)=>a+row.filter(Boolean).length,0);
+    document.getElementById("mineCount").textContent=Math.max(0,minesLeft);
+  }
+  function reveal(r,c){
+    if(r<0||r>=ROWS||c<0||c>=COLS||revealed[r][c]||flags[r][c])return;
+    revealed[r][c]=true;
+    if(grid[r][c]===-1){ // 踩雷
+      state="over"; clearInterval(timerId);
+      // 显示所有雷
+      for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<COLS;cc++)if(grid[rr][cc]===-1)revealed[rr][cc]=true;
+      render();
+      document.getElementById("overTitle").textContent="踩到地雷了";
+      document.getElementById("overMsg").textContent="用时 "+time+" 秒";
+      document.getElementById("overOv").classList.remove("hidden");
+      return;
+    }
+    if(grid[r][c]===0){
+      for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+        if(dr===0&&dc===0)continue;
+        reveal(r+dr,c+dc);
+      }
+    }
+    render();
+    checkWin();
+  }
+  function checkWin(){
+    let safe=0,open=0;
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      if(grid[r][c]!==-1)safe++;
+      if(revealed[r][c])open++;
+    }
+    if(open===safe){
+      state="over"; clearInterval(timerId);
+      document.getElementById("overTitle").textContent="扫雷成功！";
+      document.getElementById("overMsg").textContent="用时 "+time+" 秒";
+      document.getElementById("overOv").classList.remove("hidden");
+    }
+  }
+  function start(){
+    initGrid(); firstClick=true; time=0; state="playing";
+    document.getElementById("timer").textContent="0";
+    clearInterval(timerId);
+    timerId=setInterval(()=>{if(state==="playing"){time++;document.getElementById("timer").textContent=time;}},1000);
+    render();
+    document.getElementById("startOv").classList.add("hidden");
+    document.getElementById("overOv").classList.add("hidden");
+  }
+  boardEl.addEventListener("pointerdown",e=>{
+    e.preventDefault();
+    if(state!=="playing")return;
+    const el=e.target.closest(".mcell"); if(!el)return;
+    const r=+el.dataset.r,c=+el.dataset.c;
+    if(e.button===2||e.pointerType==="touch"){
+      // 长按=旗（touch 用长按由 pointerup 判断，这里简单处理右键）
+      if(e.button===2){
+        if(revealed[r][c])return;
+        flags[r][c]=!flags[r][c];
+        render();
+      }
+    }
+  });
+  boardEl.addEventListener("click",e=>{
+    if(state!=="playing")return;
+    const el=e.target.closest(".mcell"); if(!el)return;
+    const r=+el.dataset.r,c=+el.dataset.c;
+    if(flags[r][c]||revealed[r][c])return;
+    if(firstClick){placeMines(r,c);firstClick=false;}
+    reveal(r,c);
+  });
+  boardEl.addEventListener("contextmenu",e=>e.preventDefault());
+  document.getElementById("newBtn").addEventListener("click",start);
+  document.getElementById("startBtn").addEventListener("click",start);
+  document.getElementById("restartBtn").addEventListener("click",start);
+  initGrid(); render();
+})();
+</script>
+</body>
+</html>
