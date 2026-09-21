@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>打地鼠 · 云上游戏厅</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1026'/%3E%3Ccircle cx='32' cy='30' r='14' fill='%23f472b6'/%3E%3Ccircle cx='27' cy='27' r='2.4' fill='%230b1026'/%3E%3Ccircle cx='37' cy='27' r='2.4' fill='%230b1026'/%3E%3Cpath d='M26 37q6 5 12 0' stroke='%230b1026' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0b1026;--ink:#eaf2ff;--muted:rgba(234,242,255,.6);
+    --pink:#f472b6;--rose:#fb7185;--hole:rgba(16,22,52,.95);--line:rgba(140,180,255,.12);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(800px 500px at 80% -5%, rgba(244,114,182,.10) 0%, transparent 60%), var(--bg);
+    color:var(--ink);
+    font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:28px 16px 40px;
+  }
+  .back{
+    width:min(100%,470px);margin-bottom:14px;color:var(--muted);text-decoration:none;font-size:13px;
+    display:inline-flex;align-items:center;gap:6px;transition:color .15s ease;
+  }
+  .back:hover{color:var(--pink)}
+  h1{font-size:24px;font-weight:800;letter-spacing:.06em;text-align:center}
+  .sub{font-size:13px;color:var(--muted);margin:4px 0 18px;text-align:center}
+  .hud{
+    width:min(100%,470px);display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;
+  }
+  .hud .num{font-size:20px;font-weight:700;color:var(--pink);font-variant-numeric:tabular-nums}
+  .hud .lbl{font-size:11px;letter-spacing:.2em;color:var(--muted)}
+  .board-wrap{position:relative;width:min(100%,470px)}
+  #board{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:14px;
+    background:#0e1433;border:1px solid var(--line);border-radius:18px;padding:16px;
+    box-shadow:0 18px 50px rgba(0,0,0,.45);
+  }
+  .hole{
+    aspect-ratio:1;border-radius:50%;background:var(--hole);
+    position:relative;cursor:pointer;overflow:hidden;
+    border:2px solid rgba(140,180,255,.08);
+  }
+  .mole{
+    position:absolute;left:50%;bottom:-46%;transform:translateX(-50%);
+    width:78%;height:72%;transition:bottom .13s ease;
+  }
+  .hole.up .mole{bottom:10%}
+  .mole .face{
+    position:absolute;inset:0;border-radius:45% 45% 50% 50%;
+    background:radial-gradient(circle at 35% 30%, #fbcfe8, #f472b6 70%);
+  }
+  .mole .eye{position:absolute;top:34%;width:10%;height:14%;background:#0b1026;border-radius:50%}
+  .mole .eye.l{left:24%}.mole .eye.r{right:24%}
+  .mole .nose{position:absolute;top:52%;left:50%;transform:translateX(-50%);width:16%;height:13%;background:#be123c;border-radius:40%}
+  .mole .teeth{position:absolute;top:64%;left:50%;transform:translateX(-50%);width:26%;height:12%;background:#fff;border-radius:0 0 4px 4px}
+  .mole .teeth::after{content:"";position:absolute;left:50%;top:0;width:1.5px;height:100%;background:#e5e7eb}
+  .mole.gold .face{background:radial-gradient(circle at 35% 30%, #fef3c7, #fbbf24 70%)}
+  .hit-flash{position:absolute;inset:0;display:none;place-items:center;font-size:22px;color:#fff;font-weight:800;text-shadow:0 2px 8px rgba(0,0,0,.5)}
+  .hole.hit .hit-flash{display:grid}
+  .overlay{
+    position:absolute;inset:0;border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+    background:rgba(8,11,30,.88);text-align:center;padding:20px;transition:opacity .25s ease, visibility .25s ease;
+  }
+  .overlay.hidden{opacity:0;visibility:hidden;pointer-events:none}
+  .overlay h2{font-size:26px;font-weight:800}
+  .overlay p{font-size:13px;color:var(--muted);line-height:1.8}
+  .overlay .btn{padding:12px 34px;font-size:15px;box-shadow:0 8px 24px rgba(244,114,182,.3)}
+  .btn{
+    cursor:pointer;border:0;border-radius:999px;padding:12px 34px;font-size:15px;font-weight:700;
+    font-family:inherit;color:#0b1026;background:linear-gradient(120deg,var(--pink),#f9a8d4);
+    transition:transform .15s ease;
+  }
+  .btn:hover{transform:translateY(-2px) scale(1.02)}
+  .btn:active{transform:scale(.97)}
+  .tip{width:min(100%,470px);margin-top:14px;font-size:12px;color:var(--muted);text-align:center}
+  .tip b{color:var(--pink)}
+  @media (max-width:480px){
+    h1{font-size:21px}
+    #board{gap:10px;padding:12px}
+  }
+  @media (prefers-reduced-motion: reduce){.mole,.overlay{transition:none}}
+</style>
+</head>
+<body>
+  <a class="back" href="../index.html">← 返回游戏厅</a>
+  <h1>打地鼠</h1>
+  <div class="sub">30 秒限时，地鼠冒头就打</div>
+  <div class="hud">
+    <div><div class="lbl">SCORE</div><div class="num" id="score">0</div></div>
+    <div style="text-align:center"><div class="lbl">TIME</div><div class="num" id="timer" style="color:var(--ink)">30</div></div>
+    <div style="text-align:right"><div class="lbl">BEST</div><div class="num" id="best" style="color:var(--yellow,#fcd34d)">0</div></div>
+  </div>
+  <div class="board-wrap">
+    <div id="board"></div>
+    <div class="overlay" id="startOv">
+      <h2>打地鼠</h2>
+      <p>30 秒内敲击冒头的地鼠<br><b style="color:var(--pink)">金色地鼠</b>得 5 分 · 普通得 1 分</p>
+      <button class="btn" id="startBtn">开始游戏</button>
+    </div>
+    <div class="overlay hidden" id="overOv">
+      <h2>时间到</h2>
+      <p>本局得分 <b id="finalScore" style="color:var(--pink)">0</b><br>最高分 <span id="finalBest" style="color:var(--ink)">0</span></p>
+      <button class="btn" id="restartBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="tip"><b>点击</b>地鼠即可击打 · 打空不扣分</div>
+<script>
+(() => {
+  "use strict";
+  const HOLES=9, DURATION=30;
+  let score, timeLeft, state="ready", timerId=null, spawnTimers=[], best;
+  const boardEl=document.getElementById("board");
+  let audioCtx=null, muted=false;
+  try{muted=localStorage.getItem("jump-muted")==="1";}catch(e){}
+  function ensureAudio(){if(!audioCtx){const AC=window.AudioContext||window.webkitAudioContext;if(AC)audioCtx=new AC();}if(audioCtx&&audioCtx.state==="suspended")audioCtx.resume();}
+  function beep(f0,f1,dur,type,vol){
+    if(muted||!audioCtx)return;
+    const t=audioCtx.currentTime,o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type=type||"square";o.frequency.setValueAtTime(f0,t);
+    o.frequency.exponentialRampToValueAtTime(f1||f0,t+dur);
+    g.gain.setValueAtTime(vol||0.1,t);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g).connect(audioCtx.destination);o.start(t);o.stop(t+dur+0.02);
+  }
+  const sfx={hit:()=>beep(600,900,0.07,"square",0.1),gold:()=>{beep(880,1320,0.1,"sine",0.12);setTimeout(()=>beep(1320,1760,0.1,"sine",0.1),70);},over:()=>beep(300,70,0.3,"sawtooth",0.15)};
+  try{best=parseInt(localStorage.getItem("jump-best-whack")||"0",10)||0;}catch(e){best=0;}
+  document.getElementById("best").textContent=best;
+
+  function buildBoard(){
+    boardEl.innerHTML="";
+    for(let i=0;i<HOLES;i++){
+      const hole=document.createElement("div");
+      hole.className="hole"; hole.dataset.i=i;
+      hole.innerHTML=`<div class="mole"><div class="face"></div><div class="eye l"></div><div class="eye r"></div><div class="nose"></div><div class="teeth"></div></div><div class="hit-flash">+1</div>`;
+      hole.addEventListener("pointerdown",e=>{e.preventDefault();whack(i,hole);});
+      boardEl.appendChild(hole);
+    }
+  }
+  function whack(i,hole){
+    if(state!=="playing")return;
+    const mole=hole.querySelector(".mole");
+    if(!hole.classList.contains("up"))return;
+    const gold=hole.classList.contains("gold");
+    score+=gold?5:1;
+    document.getElementById("score").textContent=score;
+    if(score>best){best=score;try{localStorage.setItem("jump-best-whack",String(best));}catch(e){}document.getElementById("best").textContent=best;}
+    sfx[gold?"gold":"hit"]();
+    const flash=hole.querySelector(".hit-flash");
+    flash.textContent=gold?"+5":"+1";
+    hole.classList.add("hit");
+    setTimeout(()=>hole.classList.remove("hit"),180);
+    hideMole(hole);
+  }
+  function hideMole(hole){
+    hole.classList.remove("up","gold");
+  }
+  function spawnOne(){
+    if(state!=="playing")return;
+    // 找到未冒头的洞
+    const holes=[...boardEl.children];
+    const idle=holes.filter(h=>!h.classList.contains("up"));
+    if(!idle.length)return;
+    const hole=idle[Math.floor(Math.random()*idle.length)];
+    const gold=Math.random()<0.18;
+    if(gold)hole.classList.add("gold");
+    hole.classList.add("up");
+    // 自动缩回
+    const dur=(gold?550:750)+Math.random()*500;
+    spawnTimers.push(setTimeout(()=>{hideMole(hole);},dur));
+  }
+  function spawnLoop(){
+    if(state!=="playing")return;
+    spawnOne();
+    spawnTimers.push(setTimeout(spawnLoop, 420+Math.random()*480));
+  }
+  function tick(){
+    if(state!=="playing")return;
+    timeLeft--;
+    document.getElementById("timer").textContent=Math.max(0,timeLeft);
+    if(timeLeft<=0)gameOver();
+  }
+  function gameOver(){
+    state="over"; clearInterval(timerId);
+    spawnTimers.forEach(clearTimeout); spawnTimers=[];
+    [...boardEl.children].forEach(hideMole);
+    sfx.over();
+    document.getElementById("finalScore").textContent=score;
+    document.getElementById("finalBest").textContent="最高分 "+best;
+    setTimeout(()=>{if(state==="over")document.getElementById("overOv").classList.remove("hidden");},380);
+  }
+  function start(){
+    ensureAudio();
+    score=0; timeLeft=DURATION;
+    document.getElementById("score").textContent="0";
+    document.getElementById("timer").textContent=DURATION;
+    [...boardEl.children].forEach(hideMole);
+    clearInterval(timerId); spawnTimers.forEach(clearTimeout); spawnTimers=[];
+    state="playing";
+    document.getElementById("startOv").classList.add("hidden");
+    document.getElementById("overOv").classList.add("hidden");
+    timerId=setInterval(tick,1000);
+    spawnLoop();
+  }
+  document.getElementById("startBtn").addEventListener("click",start);
+  document.getElementById("restartBtn").addEventListener("click",start);
+  buildBoard();
+})();
+</script>
+</body>
+</html>
