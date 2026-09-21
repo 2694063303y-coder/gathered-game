@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>反应力测试 · 云上游戏厅</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1026'/%3E%3Cpath d='M34 6 12 34h12l-4 24 24-30H30z' fill='%23fb923c'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0b1026;--ink:#eaf2ff;--muted:rgba(234,242,255,.6);
+    --orange:#fb923c;--green:#4ade80;--red:#f87171;--line:rgba(140,180,255,.12);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(800px 500px at 80% -5%, rgba(251,146,60,.10) 0%, transparent 60%), var(--bg);
+    color:var(--ink);
+    font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:28px 16px 40px;
+  }
+  .back{
+    width:min(100%,470px);margin-bottom:14px;color:var(--muted);text-decoration:none;font-size:13px;
+    display:inline-flex;align-items:center;gap:6px;transition:color .15s ease;
+  }
+  .back:hover{color:var(--orange)}
+  h1{font-size:24px;font-weight:800;letter-spacing:.06em;text-align:center}
+  .sub{font-size:13px;color:var(--muted);margin:4px 0 18px;text-align:center}
+  .hud{
+    width:min(100%,470px);display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;
+  }
+  .hud .num{font-size:20px;font-weight:700;color:var(--orange);font-variant-numeric:tabular-nums}
+  .hud .lbl{font-size:11px;letter-spacing:.2em;color:var(--muted)}
+  .board-wrap{position:relative;width:min(100%,470px)}
+  #arena{
+    width:100%;aspect-ratio:1;border-radius:18px;
+    background:radial-gradient(circle at 50% 50%, #3b2d66, #0e1433 80%);
+    border:1px solid var(--line);box-shadow:0 18px 50px rgba(0,0,0,.45);
+    display:grid;place-items:center;cursor:pointer;text-align:center;padding:24px;
+    transition:background .1s ease;
+    overflow:hidden;position:relative;
+  }
+  #arena.waiting{background:radial-gradient(circle at 50% 50%, #3b2d66, #0e1433 80%)}
+  #arena.go{background:radial-gradient(circle at 50% 45%, #15803d, #052e16 85%)}
+  #arena.early{background:radial-gradient(circle at 50% 50%, #7f1d1d, #2d0606 85%)}
+  #arenaText{
+    font-size:30px;font-weight:800;line-height:1.5;
+    transition:transform .12s ease;
+  }
+  #arena.early #arenaText{color:#fca5a5}
+  #arena.go #arenaText{color:#bbf7d0;animation:pulse 0.7s ease infinite}
+  #arena.waiting #arenaText{color:var(--muted)}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+  .btn{
+    cursor:pointer;border:0;border-radius:999px;padding:12px 34px;font-size:15px;font-weight:700;
+    font-family:inherit;color:#0b1026;background:linear-gradient(120deg,var(--orange),#fcd34d);
+    box-shadow:0 8px 24px rgba(251,146,60,.3);transition:transform .15s ease;
+  }
+  .btn:hover{transform:translateY(-2px) scale(1.02)}
+  .btn:active{transform:scale(.97)}
+  .tip{width:min(100%,470px);margin-top:14px;font-size:12px;color:var(--muted);text-align:center;line-height:1.8}
+  .tip b{color:var(--orange)}
+  .avg{width:min(100%,470px);margin-top:10px;font-size:13px;color:var(--muted);text-align:center}
+  .avg b{color:var(--yellow,#fcd34d);font-variant-numeric:tabular-nums}
+  @media (max-width:480px){
+    h1{font-size:21px}
+    #arenaText{font-size:24px}
+  }
+  @media (prefers-reduced-motion: reduce){#arena.go #arenaText{animation:none}}
+</style>
+</head>
+<body>
+  <a class="back" href="../index.html">← 返回游戏厅</a>
+  <h1>反应力测试</h1>
+  <div class="sub">等屏幕变绿，立刻点击</div>
+  <div class="hud">
+    <div><div class="lbl">ROUND</div><div class="num" id="round">0 / 5</div></div>
+    <div style="text-align:right"><div class="lbl">LAST</div><div class="num" id="last" style="color:var(--ink)">—</div></div>
+  </div>
+  <div class="board-wrap">
+    <div id="arena" class="waiting">
+      <div id="arenaText">点击开始</div>
+    </div>
+  </div>
+  <div class="avg">平均反应 <b id="avgMs">—</b></div>
+  <div class="tip"><b>不要提前点击</b> · 绿色出现后越快点击越好 · 共 5 轮取平均</div>
+<script>
+(() => {
+  "use strict";
+  const arena=document.getElementById("arena");
+  const arenaText=document.getElementById("arenaText");
+  const ROUNDS=5;
+  let phase="idle"; // idle|waiting|go|early|done
+  let round=0, times=[], goAt=0, timeoutId=null;
+
+  function setPhase(p){
+    phase=p;
+    arena.className="";
+    if(p==="waiting")arena.classList.add("waiting");
+    if(p==="go")arena.classList.add("go");
+    if(p==="early")arena.classList.add("early");
+  }
+  function startRound(){
+    round++;
+    document.getElementById("round").textContent=round+" / "+ROUNDS;
+    setPhase("waiting");
+    arenaText.textContent="等绿色…";
+    const delay=800+Math.random()*2500;
+    timeoutId=setTimeout(()=>{
+      setPhase("go");
+      goAt=performance.now();
+      arenaText.textContent="点击！";
+    },delay);
+  }
+  function finish(){
+    setPhase("done");
+    const avg=times.reduce((a,b)=>a+b,0)/times.length;
+    document.getElementById("avgMs").textContent=Math.round(avg)+" ms";
+    arenaText.innerHTML="完成！<br>平均 "+Math.round(avg)+" ms";
+    round=0; times=[];
+    timeoutId=setTimeout(()=>{
+      setPhase("waiting");
+      arenaText.textContent="再测一次";
+    },1600);
+  }
+  function handleTap(){
+    if(phase==="idle"){
+      startRound();
+      return;
+    }
+    if(phase==="waiting"){
+      clearTimeout(timeoutId);
+      setPhase("early");
+      arenaText.textContent="太早了！再试";
+      document.getElementById("last").textContent="—";
+      timeoutId=setTimeout(()=>{round--;startRound();},900);
+      return;
+    }
+    if(phase==="go"){
+      const ms=performance.now()-goAt;
+      times.push(ms);
+      document.getElementById("last").textContent=Math.round(ms)+" ms";
+      if(round>=ROUNDS){
+        finish();
+      } else {
+        startRound();
+      }
+      return;
+    }
+    if(phase==="done"){
+      startRound();
+    }
+  }
+  arena.addEventListener("pointerdown",e=>{e.preventDefault();handleTap();});
+  document.addEventListener("keydown",e=>{
+    if(e.code==="Space"){e.preventDefault();handleTap();}
+  });
+  setPhase("idle");
+})();
+</script>
+</body>
+</html>
