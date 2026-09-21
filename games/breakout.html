@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>霓虹打砖块 · 云上游戏厅</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1026'/%3E%3Crect x='12' y='12' width='18' height='9' rx='2' fill='%2322d3ee'/%3E%3Crect x='34' y='12' width='18' height='9' rx='2' fill='%23f472b6'/%3E%3Crect x='12' y='25' width='18' height='9' rx='2' fill='%23fcd34d'/%3E%3Crect x='34' y='25' width='18' height='9' rx='2' fill='%234ade80'/%3E%3Crect x='22' y='44' width='20' height='7' rx='3' fill='%23eaf2ff'/%3E%3Ccircle cx='32' cy='38' r='4' fill='%23fb923c'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0b1026;--ink:#eaf2ff;--muted:rgba(234,242,255,.6);
+    --cyan:#22d3ee;--line:rgba(140,180,255,.12);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(800px 500px at 80% -5%, rgba(34,211,238,.10) 0%, transparent 60%), var(--bg);
+    color:var(--ink);
+    font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:28px 16px 40px;
+  }
+  .back{
+    width:min(100%,470px);margin-bottom:14px;color:var(--muted);text-decoration:none;font-size:13px;
+    display:inline-flex;align-items:center;gap:6px;transition:color .15s ease;
+  }
+  .back:hover{color:var(--cyan)}
+  h1{font-size:24px;font-weight:800;letter-spacing:.06em;text-align:center}
+  .sub{font-size:13px;color:var(--muted);margin:4px 0 18px;text-align:center}
+  .hud{
+    width:min(100%,470px);display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;
+  }
+  .hud .num{font-size:20px;font-weight:700;color:var(--cyan);font-variant-numeric:tabular-nums}
+  .hud .lbl{font-size:11px;letter-spacing:.2em;color:var(--muted)}
+  .board-wrap{position:relative;width:min(100%,470px)}
+  canvas#board{display:block;width:100%;aspect-ratio:4/5.4;border-radius:16px;background:#0e1433;border:1px solid var(--line);box-shadow:0 18px 50px rgba(0,0,0,.45)}
+  .overlay{
+    position:absolute;inset:0;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+    background:rgba(8,11,30,.88);text-align:center;padding:20px;transition:opacity .25s ease, visibility .25s ease;
+  }
+  .overlay.hidden{opacity:0;visibility:hidden;pointer-events:none}
+  .overlay h2{font-size:26px;font-weight:800}
+  .overlay p{font-size:13px;color:var(--muted);line-height:1.8}
+  .btn{
+    cursor:pointer;border:0;border-radius:999px;padding:12px 34px;font-size:15px;font-weight:700;
+    font-family:inherit;color:#0b1026;background:linear-gradient(120deg,var(--cyan),#67e8f9);
+    box-shadow:0 8px 24px rgba(34,211,238,.3);transition:transform .15s ease;
+  }
+  .btn:hover{transform:translateY(-2px) scale(1.02)}
+  .btn:active{transform:scale(.97)}
+  .tip{width:min(100%,470px);margin-top:14px;font-size:12px;color:var(--muted);text-align:center}
+  .tip b{color:var(--cyan)}
+  @media (max-width:480px){h1{font-size:21px}}
+  @media (prefers-reduced-motion: reduce){.overlay{transition:none}}
+</style>
+</head>
+<body>
+  <a class="back" href="../index.html">← 返回游戏厅</a>
+  <h1>霓虹打砖块</h1>
+  <div class="sub">反弹小球，击碎所有方块</div>
+  <div class="hud">
+    <div><div class="lbl">SCORE</div><div class="num" id="score">0</div></div>
+    <div style="text-align:center"><div class="lbl">BALLS</div><div class="num" id="balls" style="color:var(--ink)">3</div></div>
+    <div style="text-align:right"><div class="lbl">BEST</div><div class="num" id="best" style="color:var(--yellow,#fcd34d)">0</div></div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="board" width="470" height="635"></canvas>
+    <div class="overlay" id="startOv">
+      <h2>霓虹打砖块</h2>
+      <p>鼠标 / 触屏滑动控制挡板<br>反弹小球击碎全部方块</p>
+      <button class="btn" id="startBtn">开始游戏</button>
+    </div>
+    <div class="overlay hidden" id="overOv">
+      <h2 id="overTitle">游戏结束</h2>
+      <p id="overMsg">得分 <b style="color:var(--cyan)">0</b></p>
+      <button class="btn" id="restartBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="tip"><b>←→</b> 或 <b>滑动</b>控制挡板 · 接住小球不落地</div>
+<script>
+(() => {
+  "use strict";
+  const canvas=document.getElementById("board"), ctx=canvas.getContext("2d");
+  const W=470, H=635, dpr=Math.min(window.devicePixelRatio||1,2.5);
+  canvas.width=W*dpr; canvas.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+  const PAD_W=84, PAD_H=12, PAD_Y=H-38, BALL_R=7;
+  const COLS=7, ROWS=5;
+  let state="ready", score, balls, paddle, ball, bricks, best;
+  try{best=parseInt(localStorage.getItem("jump-best-breakout")||"0",10)||0;}catch(e){best=0;}
+  document.getElementById("best").textContent=best;
+
+  const BRICK_COLORS=["#22d3ee","#60a5fa","#a78bfa","#f472b6","#fcd34d"];
+  function buildBricks(){
+    bricks=[];
+    const bw=W/COLS, bh=24;
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        bricks.push({x:c*bw,y:56+r*(bh+8),w:bw-6,h:bh,color:BRICK_COLORS[r],alive:true,hp:1});
+      }
+    }
+  }
+  function resetBall(){
+    ball={x:paddle.x+PAD_W/2,y:PAD_Y-12,vx:0,vy:0,stuck:true};
+  }
+  function start(){
+    score=0; balls=3;
+    paddle={x:(W-PAD_W)/2};
+    buildBricks(); resetBall();
+    document.getElementById("score").textContent="0";
+    document.getElementById("balls").textContent="3";
+    state="playing";
+    document.getElementById("startOv").classList.add("hidden");
+    document.getElementById("overOv").classList.add("hidden");
+  }
+  function launch(){
+    if(ball.stuck){ball.vx=(Math.random()*2-1)*3;ball.vy=-5.2;ball.stuck=false;}
+  }
+  function loseBall(){
+    balls--;
+    document.getElementById("balls").textContent=balls;
+    if(balls<=0){
+      state="over";
+      if(score>best){best=score;try{localStorage.setItem("jump-best-breakout",String(best));}catch(e){}document.getElementById("best").textContent=best;}
+      document.getElementById("overTitle").textContent="游戏结束";
+      document.getElementById("overMsg").innerHTML="得分 <b style='color:var(--cyan)'>"+score+"</b>";
+      setTimeout(()=>{if(state==="over")document.getElementById("overOv").classList.remove("hidden");},350);
+    } else {
+      resetBall();
+    }
+  }
+  function win(){
+    state="over";
+    if(score>best){best=score;try{localStorage.setItem("jump-best-breakout",String(best));}catch(e){}document.getElementById("best").textContent=best;}
+    document.getElementById("overTitle").textContent="全部击碎！";
+    document.getElementById("overMsg").innerHTML="得分 <b style='color:var(--cyan)'>"+score+"</b>";
+    setTimeout(()=>{if(state==="over")document.getElementById("overOv").classList.remove("hidden");},350);
+  }
+  function update(){
+    if(ball.stuck){
+      ball.x=paddle.x+PAD_W/2; ball.y=PAD_Y-12;
+      return;
+    }
+    ball.x+=ball.vx; ball.y+=ball.vy;
+    // 左右墙
+    if(ball.x-BALL_R<0){ball.x=BALL_R;ball.vx=Math.abs(ball.vx);}
+    if(ball.x+BALL_R>W){ball.x=W-BALL_R;ball.vx=-Math.abs(ball.vx);}
+    // 顶部
+    if(ball.y-BALL_R<0){ball.y=BALL_R;ball.vy=Math.abs(ball.vy);}
+    // 底部
+    if(ball.y-BALL_R>PAD_Y+PAD_H){loseBall();return;}
+    // 挡板
+    if(ball.vy>0&&ball.y+BALL_R>=PAD_Y&&ball.y+BALL_R<=PAD_Y+PAD_H+6&&ball.x>=paddle.x-6&&ball.x<=paddle.x+PAD_W+6){
+      const hit=(ball.x-(paddle.x+PAD_W/2))/(PAD_W/2);
+      ball.vy=-Math.abs(ball.vy);
+      ball.vx=hit*4.2;
+      ball.y=PAD_Y-BALL_R-1;
+    }
+    // 砖块
+    for(const b of bricks){
+      if(!b.alive)continue;
+      if(ball.x+BALL_R>b.x&&ball.x-BALL_R<b.x+b.w&&ball.y+BALL_R>b.y&&ball.y-BALL_R<b.y+b.h){
+        b.alive=false;
+        score+=10;
+        document.getElementById("score").textContent=score;
+        if(score>best){best=score;try{localStorage.setItem("jump-best-breakout",String(best));}catch(e){}document.getElementById("best").textContent=best;}
+        // 简单反弹
+        const fromLeft=ball.x<b.x, fromRight=ball.x>b.x+b.w;
+        const fromTop=ball.y<b.y, fromBottom=ball.y>b.y+b.h;
+        if((fromLeft||fromRight)&&!fromTop&&!fromBottom)ball.vx=-ball.vx;
+        else ball.vy=-ball.vy;
+        if(!bricks.some(x=>x.alive))win();
+        break;
+      }
+    }
+  }
+  function draw(){
+    ctx.fillStyle="#0e1433"; ctx.fillRect(0,0,W,H);
+    // 星星背景
+    ctx.fillStyle="rgba(234,242,255,.10)";
+    const t=Date.now()/1000;
+    for(let i=0;i<24;i++){
+      const sx=(i*97.3)%W, sy=(i*53.7)%H;
+      const tw=0.3+0.3*Math.sin(t+i);
+      ctx.globalAlpha=tw; ctx.beginPath(); ctx.arc(sx,sy,1.1,0,Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+    // 砖块
+    for(const b of bricks){
+      if(!b.alive)continue;
+      ctx.fillStyle=b.color;
+      ctx.beginPath(); ctx.roundRect(b.x,b.y,b.w,b.h,4); ctx.fill();
+      ctx.fillStyle="rgba(255,255,255,.25)";
+      ctx.fillRect(b.x+2,b.y+2,b.w-4,4);
+    }
+    // 挡板
+    const grad=ctx.createLinearGradient(paddle.x,0,paddle.x+PAD_W,0);
+    grad.addColorStop(0,"#0e7490");grad.addColorStop(.5,"#67e8f9");grad.addColorStop(1,"#0e7490");
+    ctx.fillStyle=grad;
+    ctx.beginPath(); ctx.roundRect(paddle.x,PAD_Y,PAD_W,PAD_H,7); ctx.fill();
+    ctx.fillStyle="rgba(255,255,255,.35)"; ctx.fillRect(paddle.x+10,PAD_Y+2,PAD_W-20,3);
+    // 球
+    ctx.fillStyle="#fb923c";
+    ctx.beginPath(); ctx.arc(ball.x,ball.y,BALL_R,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle="rgba(255,255,255,.5)"; ctx.beginPath(); ctx.arc(ball.x-2,ball.y-2,2.2,0,Math.PI*2); ctx.fill();
+  }
+  function loop(){
+    requestAnimationFrame(loop);
+    if(state==="playing")update();
+    draw();
+  }
+  let pointerX=null;
+  canvas.addEventListener("pointerdown",e=>{
+    if(state==="ready"){start();return;}
+    if(state!=="playing")return;
+    pointerX=e.clientX;
+    if(ball.stuck)launch();
+  });
+  canvas.addEventListener("pointermove",e=>{
+    if(state!=="playing"||pointerX===null)return;
+    const rect=canvas.getBoundingClientRect();
+    const target=((e.clientX-rect.left)/rect.width)*W;
+    paddle.x=Math.max(0,Math.min(W-PAD_W,target));
+  });
+  canvas.addEventListener("pointerup",()=>pointerX=null);
+  document.addEventListener("keydown",e=>{
+    if(state==="ready"){start();launch();return;}
+    if(state!=="playing")return;
+    if(e.code==="ArrowLeft"||e.code==="KeyA")paddle.x=Math.max(0,paddle.x-22);
+    if(e.code==="ArrowRight"||e.code==="KeyD")paddle.x=Math.min(W-PAD_W,paddle.x+22);
+    if(e.code==="Space")launch();
+  });
+  document.getElementById("startBtn").addEventListener("click",()=>{start();launch();});
+  document.getElementById("restartBtn").addEventListener("click",()=>{start();launch();});
+  // 初始：ready 状态，显示开始界面
+  paddle={x:(W-PAD_W)/2}; buildBricks(); resetBall(); draw();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
